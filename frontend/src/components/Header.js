@@ -1,7 +1,7 @@
 import React, {useEffect, useState} from 'react'
 import {Link, useLocation} from 'react-router-dom'
 
-export const Header = ({user}) => {
+const Header = ({user}) => {
     const location = useLocation().pathname;
     const [registerVisibility, setRegisterVisibility] = useState(true);
     const [loginVisibility, setLoginVisibility] = useState(true);
