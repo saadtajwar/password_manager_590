@@ -14,9 +14,9 @@ def home():
 #   -> email
 #   -> password
 # Table 2: <USERiD>
-#   ->  website
+#   -> website
 #   -> alias
 #   -> password
-#   -> shared_with_me (bool)
-#   -> shared_with_others (bool)
+#   -> shared_with_me: boolean
+#   -> shared_with_others boolean
 #   -> shared_list
