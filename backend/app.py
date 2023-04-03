@@ -18,7 +18,7 @@ CREATE_PASSWORDS_TABLE = (
 )
 
 INSERT_USER_RETURN_ID = (
-    "INSERT INTO users (name, email, password) VALUES (%s %s %s) RETURNING user_id;"
+    "INSERT INTO users (name, email, password) VALUES (%s, %s, %s) RETURNING user_id;"
 )
 
 INSERT_PASSWORDS = (
@@ -31,12 +31,12 @@ def create_users():
     if request.method == "POST":
         data = request.get_json()
         name, email, password = data["name"], data["email"], data["password"]
+        print(name)
+        print(email)
+        print(password)
         with connection:
             with connection.cursor() as cursor:
                 cursor.execute(CREATE_USERS_TABLE)
-                print(name)
-                print(email)
-                print(password)
                 cursor.execute(INSERT_USER_RETURN_ID, (name, email, password, ))
                 user_id = cursor.fetchone()[0]
         return {"id": user_id, "message": f"Room {name} created."}, 201
