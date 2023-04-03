@@ -10,11 +10,11 @@ url = os.getenv("DATABASE_URL")
 connection = psycopg2.connect(url)
 
 CREATE_USERS_TABLE = (
-    "CREATE TABLE IF NOT EXISTS users (user_id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, email VARCHAR(100) NOT NULL, password VARCHAR(100) NOT NULL);"
+    "CREATE TABLE IF NOT EXISTS users (user_id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, email VARCHAR(100) NOT NULL UNIQUE, password VARCHAR(100) NOT NULL);"
 )
 
 CREATE_PASSWORDS_TABLE = (
-    "CREATE TABLE IF NOT EXISTS passwords (website TEXT, alias TEXT, password TEXT, shared_with_me BOOLEAN, shared_with_others BOOLEAN, shared_list TEXT[]);"
+    "CREATE TABLE IF NOT EXISTS passwords%s (website TEXT, alias TEXT, passwords TEXT, shared_with_me BOOLEAN, shared_with_others BOOLEAN, shared_list INTEGER[]);"
 )
 
 GET_USER_INFO = (
@@ -27,7 +27,7 @@ INSERT_USER_RETURN_ID = (
 )
 
 INSERT_PASSWORDS = (
-    "INSERT INTO passwords (website, alias, passwords, shared_with_me, shared_with_others, shared_list) VALUES (%s %s %s %s %s %s)"
+    "INSERT INTO passwords%s (website, alias, passwords, shared_with_me, shared_with_others, shared_list) VALUES (%s, %s, %s, %s, %s, %s)"
 )
 
 
@@ -52,8 +52,18 @@ def create_users():
                 cursor.execute(CREATE_USERS_TABLE)
                 cursor.execute(INSERT_USER_RETURN_ID, (name, email, password, ))
                 user_id = cursor.fetchone()[0]
+                cursor.execute(CREATE_PASSWORDS_TABLE, (user_id, ))
         return {"id": user_id, "message": f"Room {name} created."}, 201
 
+@app.route("/api/password", methods = ["POST"])
+def create_password():
+    if request.method == "POST":
+        data = request.get_json()
+        user_id, website, alias, password = data["id"], data["website"], data["alias"], data["password"]
+        with connection:
+            with connection.cursor() as cursor:
+                cursor.execute(INSERT_PASSWORDS, (user_id, website, alias, password, "TRUE", "FALSE", f"{{}}", ))
+        return {"message": f"Password for {website} inserted"}, 201
 
 
 
