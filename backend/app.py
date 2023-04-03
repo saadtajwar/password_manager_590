@@ -17,6 +17,11 @@ CREATE_PASSWORDS_TABLE = (
     "CREATE TABLE IF NOT EXISTS passwords (website TEXT, alias TEXT, password TEXT, shared_with_me BOOLEAN, shared_with_others BOOLEAN, shared_list TEXT[]);"
 )
 
+GET_USER_INFO = (
+    # SELECT column_name FROM information_schema.columns WHERE table_name='your_table' and column_name='your_column';
+    "SELECT %s FROM information_schema.columns WHERE table_name='%s' and column_name='%s';"
+)
+
 INSERT_USER_RETURN_ID = (
     "INSERT INTO users (name, email, password) VALUES (%s, %s, %s) RETURNING user_id;"
 )
@@ -28,12 +33,20 @@ INSERT_PASSWORDS = (
 
 @app.route("/api/user", methods = ["GET", "POST"])
 def create_users():
-    if request.method == "POST":
+    if request.method == "GET":
+        data = request.get_json()
+        email, password = data["email"], data["password"]
+        with connection:
+            with connection.cursor() as cursor:
+                cursor.execute(GET_USER_INFO, (email, "users", "email", ))
+                user_info = cursor.fetchone()[0]
+                # if len(user_info) > 1 and user_info["password"] == password
+        return {"user_info": user_info, "message": f"User info with email {email} was retrieved"}, 201
+        
+
+    elif request.method == "POST":
         data = request.get_json()
         name, email, password = data["name"], data["email"], data["password"]
-        print(name)
-        print(email)
-        print(password)
         with connection:
             with connection.cursor() as cursor:
                 cursor.execute(CREATE_USERS_TABLE)
