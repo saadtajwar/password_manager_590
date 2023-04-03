@@ -10,7 +10,7 @@ url = os.getenv("DATABASE_URL")
 connection = psycopg2.connect(url)
 
 CREATE_USERS_TABLE = (
-    "CREATE TABLE IF NOT EXISTS users (userId SERIAL PRIMARY KEY, name TEXT, email TEXT, password TEXT;"
+    "CREATE TABLE IF NOT EXISTS users (user_id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, email VARCHAR(100) NOT NULL, password VARCHAR(100) NOT NULL);"
 )
 
 CREATE_PASSWORDS_TABLE = (
@@ -18,7 +18,7 @@ CREATE_PASSWORDS_TABLE = (
 )
 
 INSERT_USER_RETURN_ID = (
-    "INSERT INTO passwords (name, email, password) VALUES (%s %s %s) RETURNING userId;"
+    "INSERT INTO users (name, email, password) VALUES (%s %s %s) RETURNING user_id;"
 )
 
 INSERT_PASSWORDS = (
@@ -26,16 +26,20 @@ INSERT_PASSWORDS = (
 )
 
 
-@app.post("/api/password")
+@app.route("/api/user", methods = ["GET", "POST"])
 def create_users():
-    data = request.get_json()
-    name, email, password = data["name"], data["email"], data["password"]
-    with connection:
-        with connection.cursor() as cursor:
-            cursor.execute(CREATE_USERS_TABLE)
-            cursor.execute(INSERT_USER_RETURN_ID, (name, email, password))
-            user_id = cursor.fetchone()[0]
-    return {"id": user_id, "message": f"Room {name} created."}, 201
+    if request.method == "POST":
+        data = request.get_json()
+        name, email, password = data["name"], data["email"], data["password"]
+        with connection:
+            with connection.cursor() as cursor:
+                cursor.execute(CREATE_USERS_TABLE)
+                print(name)
+                print(email)
+                print(password)
+                cursor.execute(INSERT_USER_RETURN_ID, (name, email, password, ))
+                user_id = cursor.fetchone()[0]
+        return {"id": user_id, "message": f"Room {name} created."}, 201
 
 
 
