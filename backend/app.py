@@ -67,42 +67,42 @@ SHARE_PASSWORD = (
     
 UNSHARE_PASSWORD = (
     # TODO: Update shared_with_others and shared-list (NON-PRIORITY)
-)
-    
+)   
 
-@app.route("/api/user", methods = ["GET", "POST"])
-def user():
-    if request.method == "GET":
-        # TODO authenticate and get user_id
-        data = request.get_json()
-        email, password = data["email"], data["password"]
-        with connection:
-            with connection.cursor() as cursor:
-                cursor.execute(GET_USER_INFO, (email, "users", "email", ))
-                user_info = cursor.fetchone()[0]
-                # if len(user_info) > 1 and user_info["password"] == password
-        return {"user_info": user_info, "message": f"User info with email {email} was retrieved"}, 201
-        
-    elif request.method == "POST":
-        data = request.get_json()
-        name, email, password = data["name"], data["email"], data["password"]
-        with connection:
-            with connection.cursor() as cursor:
-                cursor.execute(CREATE_USERS_TABLE)
-                cursor.execute(INSERT_USER_RETURN_ID, (name, email, password, ))
-                user_id = cursor.fetchone()[0]
-                cursor.execute(CREATE_PASSWORDS_TABLE, (user_id, ))
-        return {"id": user_id, "message": f"Room {name} created."}, 201
+@app.post("/api/users")
+def add_user():
+    data = request.get_json()
+    name, email, password = data["name"], data["email"], data["password"]
+    with connection:
+        with connection.cursor() as cursor:
+            cursor.execute(CREATE_USERS_TABLE)
+            cursor.execute(INSERT_USER_RETURN_ID, (name, email, password, ))
+            user_id = cursor.fetchone()[0]
+            cursor.execute(CREATE_PASSWORDS_TABLE, (user_id, ))
+    return {"id": user_id, "message": f"User {name} added."}, 201
 
+@app.get("/api/users/authenticate")
+def authenticate():
+    # TODO authenticate user and return user_id
+    data = request.get_json()
+    email, password = data["email"], data["password"]
+    with connection:
+        with connection.cursor() as cursor:
+            cursor.execute(GET_USER_INFO, (email, "users", "email", ))
+            user_info = cursor.fetchone()[0]
+            # if len(user_info) > 1 and user_info["password"] == password
+    return {"user_info": user_info, "message": f"User info with email {email} was retrieved"}, 201
 
-@app.route("/api/password", methods = ["POST"])
-def create_password():
-    if request.method == "POST":
-        data = request.get_json()
-        user_id, website, alias, password = data["id"], data["website"], data["alias"], data["password"]
-        with connection:
-            with connection.cursor() as cursor:
-                cursor.execute(INSERT_PASSWORDS, (user_id, website, alias, password, "TRUE", "FALSE", f"{{}}", ))
-        return {"message": f"Password for {website} inserted"}, 201
+@app.get("/api/users/<int:user_id>")
+def get_user(user_id):
+    # TODO return users passwords based on IDs, eventually implement API endpoint security
+    pass
 
-
+@app.post("/api/users/<int:user_id>")
+def add_credential(user_id):
+    data = request.get_json()
+    website, alias, password =  data["website"], data["credentialUsername"], data["credentialPassword"]
+    with connection:
+        with connection.cursor() as cursor:
+            cursor.execute(INSERT_PASSWORDS, (user_id, website, alias, password, "FALSE", "FALSE", f"{{}}", ))
+    return {"message": f"Password for {website} inserted"}, 201
