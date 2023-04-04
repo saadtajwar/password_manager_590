@@ -54,10 +54,11 @@ INSERT_PASSWORDS = (
     
 DELETE_PASSWORD = (
     # TODO: Delete a password givne a user_id and password_id
+    "DELETE FROM passwords%s WHERE website = %s"
 )
     
 UPDATE_PASSWORD = (
-    # TODO: Update website, alias, or password field
+    "UPDATE passwords%s SET passwords = %s WHERE website = %s;"
 )
     
 SHARE_PASSWORD = (
@@ -105,11 +106,31 @@ def get_user(user_id):
     return {"passwords": passwords, "message": "Passwords fetched successfully"}, 200
 
 # Adds a credential to the user's password table
-@app.post("/api/users/<int:user_id>")
+@app.post("/api/users/<int:user_id>/add")
 def add_credential(user_id):
     data = request.get_json()
     website, alias, password =  data["website"], data["alias"], data["password"]
     with connection:
         with connection.cursor() as cursor:
             cursor.execute(INSERT_PASSWORDS, (user_id, website, alias, password, "FALSE", "FALSE", f"{{}}", ))
-    return {"message": f"Password for {website} inserted"}, 201
+    return {"message": f"Password for {website} inserted"}, 200
+
+# Updates a credential in the user's password table
+@app.post("/api/users/<int:user_id>/update")
+def update_credential(user_id):
+    data = request.get_json()
+    website, password = data["website"], data["password"]
+    with connection:
+        with connection.cursor() as cursor:
+            cursor.execute(UPDATE_PASSWORD, (user_id, password, website))
+    return {"message": f"Password for {website} updated"}, 200
+
+# Deletes a credential in the user's password table
+@app.post("/api/users/<int:user_id>/delete")
+def delete_credential(user_id):
+    data = request.get_json()
+    website = data["website"]
+    with connection:
+        with connection.cursor() as cursor:
+            cursor.execute(DELETE_PASSWORD, (user_id, website))
+    return {"message": f"Password for {website} deleted"}, 200
