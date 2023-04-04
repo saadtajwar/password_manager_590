@@ -40,8 +40,12 @@ INSERT_USER_RETURN_ID = (
     "INSERT INTO users (name, email, password) VALUES (%s, %s, %s) RETURNING user_id;"
 )
 
-DELETE_USER_INFO = (
-    # TODO: Delete user account given user id, and all associated passwords. This involves a lot of stuff
+DELETE_USER_PASSWORDS = (
+    "DROP TABLE passwords%s;"
+)
+
+DELETE_USER = (
+    "DELETE FROM users WHERE user_id = %s"
 )
 
 GET_PASSWORDS = (
@@ -53,7 +57,6 @@ INSERT_PASSWORDS = (
 )
     
 DELETE_PASSWORD = (
-    # TODO: Delete a password givne a user_id and password_id
     "DELETE FROM passwords%s WHERE website = %s"
 )
     
@@ -80,7 +83,16 @@ def add_user():
             cursor.execute(INSERT_USER_RETURN_ID, (name, email, password, ))
             user_id = cursor.fetchone()[0]
             cursor.execute(CREATE_PASSWORDS_TABLE, (user_id, ))
-    return {"id": user_id, "message": f"User {name} added."}, 201
+    return {"id": user_id, "message": f"User {user_id} added."}, 201
+
+# Deletes a user from the users table and deletes their passwords table
+@app.delete("/api/users/<int:user_id>")
+def delete_user(user_id):
+    with connection:
+        with connection.cursor() as cursor:
+            cursor.execute(DELETE_USER_PASSWORDS, (user_id, ))
+            cursor.execute(DELETE_USER, (user_id, ))
+    return {"message": f"User {user_id} deleted."}, 200
 
 # Authenticates a user when provided with email and password - returns user's user_id if valid
 @app.get("/api/users/authenticate")
