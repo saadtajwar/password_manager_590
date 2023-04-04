@@ -31,10 +31,9 @@ CREATE_PASSWORDS_TABLE = (
     "CREATE TABLE IF NOT EXISTS passwords%s (website TEXT, alias TEXT, passwords TEXT, shared_with_me BOOLEAN, shared_with_others BOOLEAN, shared_list INTEGER[]);"
 )
 
-GET_USER_INFO = (
+GET_USER_ID = (
     # TODO: Authenticates and gets user_id based on email and password from log in
-    # SELECT column_name FROM information_schema.columns WHERE table_name='your_table' and column_name='your_column';
-    "SELECT %s FROM information_schema.columns WHERE table_name='%s' and column_name='%s';"
+    "SELECT user_id FROM users WHERE email=%s AND password=%s;"
 )
 
 INSERT_USER_RETURN_ID = (
@@ -46,7 +45,7 @@ DELETE_USER_INFO = (
 )
 
 GET_PASSWORDS = (
-    # TODO: Get's all the passwords given a user_id
+    "SELECT website, alias, passwords FROM passwords%s;"
 )
     
 INSERT_PASSWORDS = (
@@ -69,6 +68,7 @@ UNSHARE_PASSWORD = (
     # TODO: Update shared_with_others and shared-list (NON-PRIORITY)
 )   
 
+# Registers a user - adds new user to users table and creates their password table
 @app.post("/api/users")
 def add_user():
     data = request.get_json()
@@ -81,27 +81,34 @@ def add_user():
             cursor.execute(CREATE_PASSWORDS_TABLE, (user_id, ))
     return {"id": user_id, "message": f"User {name} added."}, 201
 
+# Authenticates a user when provided with email and password - returns user's user_id if valid
 @app.get("/api/users/authenticate")
 def authenticate():
-    # TODO authenticate user and return user_id
     data = request.get_json()
     email, password = data["email"], data["password"]
     with connection:
         with connection.cursor() as cursor:
-            cursor.execute(GET_USER_INFO, (email, "users", "email", ))
-            user_info = cursor.fetchone()[0]
-            # if len(user_info) > 1 and user_info["password"] == password
-    return {"user_info": user_info, "message": f"User info with email {email} was retrieved"}, 201
+            cursor.execute(GET_USER_ID, (email, password, ))
+            user_id = cursor.fetchone()
+            if user_id is not None:
+                return {"user_id": user_id[0], "message": "Authentication successful"}, 200
+            else:
+                return {"message": "Authentication failed"}, 401
 
+# Fetches list of user's passwords in (website, alias, password) form
 @app.get("/api/users/<int:user_id>")
 def get_user(user_id):
-    # TODO return users passwords based on IDs, eventually implement API endpoint security
-    pass
+    with connection:
+        with connection.cursor() as cursor:
+            cursor.execute(GET_PASSWORDS, (user_id, ))
+            passwords = cursor.fetchall()
+    return {"passwords": passwords, "message": "Passwords fetched successfully"}, 200
 
+# Adds a credential to the user's password table
 @app.post("/api/users/<int:user_id>")
 def add_credential(user_id):
     data = request.get_json()
-    website, alias, password =  data["website"], data["credentialUsername"], data["credentialPassword"]
+    website, alias, password =  data["website"], data["alias"], data["password"]
     with connection:
         with connection.cursor() as cursor:
             cursor.execute(INSERT_PASSWORDS, (user_id, website, alias, password, "FALSE", "FALSE", f"{{}}", ))
