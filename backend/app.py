@@ -28,7 +28,7 @@ CREATE_USERS_TABLE = (
 )
 
 CREATE_PASSWORDS_TABLE = (
-    "CREATE TABLE IF NOT EXISTS passwords%s (website TEXT, alias TEXT, passwords TEXT, shared_with_me BOOLEAN, shared_with_others BOOLEAN, shared_list INTEGER[]);"
+    "CREATE TABLE IF NOT EXISTS passwords%s (website TEXT, alias TEXT, password TEXT, is_owner BOOLEAN, shared_list INTEGER[]);"
 )
 
 GET_USER_ID_WITH_PASSWORD = (
@@ -40,11 +40,11 @@ GET_USER_ID = (
 )
 
 GET_PASSWORDS = (
-    "SELECT website, alias, passwords FROM passwords%s;"
+    "SELECT website, alias, password, is_owner, shared_list FROM passwords%s;"
 )
 
-GET_PASSWORD_AND_ALIAS = (
-    "SELECT alias, passwords FROM passwords%s WHERE website = %s"
+GET_PASSWORD_AND_ALIAS_FOR_WEBSITE = (
+    "SELECT alias, password FROM passwords%s WHERE website = %s"
 )
 
 INSERT_USER_RETURN_ID = (
@@ -52,7 +52,7 @@ INSERT_USER_RETURN_ID = (
 )
 
 INSERT_PASSWORDS = (
-    "INSERT INTO passwords%s (website, alias, passwords, shared_with_me, shared_with_others, shared_list) VALUES (%s, %s, %s, %s, %s, %s)"
+    "INSERT INTO passwords%s (website, alias, password, is_owner, shared_list) VALUES (%s, %s, %s, %s, %s)"
 )
 
 DELETE_USER_PASSWORDS = (
@@ -68,16 +68,16 @@ DELETE_PASSWORD = (
 )
     
 UPDATE_PASSWORD = (
-    "UPDATE passwords%s SET passwords = %s WHERE website = %s;"
+    "UPDATE passwords%s SET password = %s WHERE website = %s;"
 )
     
 ADD_TO_SHARED_LIST = (
     "UPDATE passwords%s SET shared_list = (SELECT shared_list FROM passwords%s WHERE website = %s) || ARRAY[%s] WHERE website = %s;"
 )
 
-UNSHARE_PASSWORD = (
-    # TODO: Update shared_with_others and shared-list (NON-PRIORITY)
-)   
+REMOVE_FROM_SHARED_LIST = (
+    "UPDATE passwords%s SET shared_list = (ARRAY_REMOVE((SELECT shared_list FROM passwords%s WHERE website = %s), %s)) WHERE website = %s"
+)
 
 # Registers a user - adds new user to users table and creates their password table
 @app.post("/api/users")
@@ -131,7 +131,7 @@ def add_credential(user_id):
     website, alias, password =  data["website"], data["alias"], data["password"]
     with connection:
         with connection.cursor() as cursor:
-            cursor.execute(INSERT_PASSWORDS, (user_id, website, alias, password, "FALSE", "FALSE", f"{{}}", ))
+            cursor.execute(INSERT_PASSWORDS, (user_id, website, alias, password, True, f"{{}}", ))
     return {"message": f"Password for {website} inserted"}, 200
 
 # Updates a credential in the user's password table
@@ -141,6 +141,7 @@ def update_credential(user_id):
     website, password = data["website"], data["password"]
     with connection:
         with connection.cursor() as cursor:
+            # TODO: only allow update if user is owner of password
             cursor.execute(UPDATE_PASSWORD, (user_id, password, website))
             # TODO: update password in shared users' tables
     return {"message": f"Password for {website} updated"}, 200
@@ -152,6 +153,7 @@ def delete_credential(user_id):
     website = data["website"]
     with connection:
         with connection.cursor() as cursor:
+            # TODO: only allow deletion if user is owner of password
             cursor.execute(DELETE_PASSWORD, (user_id, website))
             # TODO: delete password from shared users tables
     return {"message": f"Password for {website} deleted"}, 200
@@ -163,18 +165,27 @@ def share_credential(user_id):
     website, email = data["website"], data["email"]
     with connection:
         with connection.cursor() as cursor:
+            # TODO: only allow share if user is owner of password
             cursor.execute(GET_USER_ID, (email, ))
             other_user_id = cursor.fetchone()[0]
             cursor.execute(ADD_TO_SHARED_LIST, (user_id, user_id, website, other_user_id, website))
-            cursor.execute(GET_PASSWORD_AND_ALIAS, (user_id, website))
+            cursor.execute(GET_PASSWORD_AND_ALIAS_FOR_WEBSITE, (user_id, website))
             alias_and_password = cursor.fetchone()
             alias, password = alias_and_password[0], alias_and_password[1]
-            cursor.execute(INSERT_PASSWORDS, (other_user_id, website, alias, password, True, True, f"{{ {user_id} }}"))
+            cursor.execute(INSERT_PASSWORDS, (other_user_id, website, alias, password, False, f"{{ {user_id} }}"))
     return {"message": "Password shared successfully"}, 200
 
 
 # Unshares a user's credential with a given user
 @app.post("/api/users/<int:user_id>/unshare")
 def unshared_credential(user_id):
-    pass
-    #TODO
+    data = request.get_json()
+    website, email = data["website"], data["email"]
+    with connection:
+        with connection.cursor() as cursor:
+            # TODO: only allow unshare if user is owner of password
+            cursor.execute(GET_USER_ID, (email, ))
+            other_user_id = cursor.fetchone()[0]
+            cursor.execute(REMOVE_FROM_SHARED_LIST, (user_id, user_id, website, other_user_id, website))
+            cursor.execute(DELETE_PASSWORD, (other_user_id, website))
+    return {"message": "Password unshared successfully"}, 200
