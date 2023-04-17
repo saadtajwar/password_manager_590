@@ -1,5 +1,6 @@
 import os
 import psycopg2
+import bcrypt
 from dotenv import load_dotenv
 from flask import Flask, request
 
@@ -24,15 +25,15 @@ connection = psycopg2.connect(url)
 #   -> shared_list
 
 CREATE_USERS_TABLE = (
-    "CREATE TABLE IF NOT EXISTS users (user_id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, email VARCHAR(100) NOT NULL UNIQUE, password VARCHAR(100) NOT NULL);"
+    "CREATE TABLE IF NOT EXISTS users (user_id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, email VARCHAR(100) NOT NULL UNIQUE, password TEXT NOT NULL);"
 )
 
 CREATE_PASSWORDS_TABLE = (
     "CREATE TABLE IF NOT EXISTS passwords%s (website TEXT, alias TEXT, password TEXT, is_owner BOOLEAN, shared_list INTEGER[]);"
 )
 
-GET_USER_ID_WITH_PASSWORD = (
-    "SELECT user_id FROM users WHERE email=%s AND password=%s;"
+GET_USER_PASSWORD = (
+    "SELECT password FROM users WHERE email=%s;"
 )
 
 GET_USER_ID = (
@@ -86,9 +87,15 @@ def add_user():
     name, email, password = data["name"], data["email"], data["password"]
     with connection:
         with connection.cursor() as cursor:
+            # Create Users table if it doesn't already exist
             cursor.execute(CREATE_USERS_TABLE)
-            cursor.execute(INSERT_USER_RETURN_ID, (name, email, password, ))
+            # Hash master password before storing
+            salt = bcrypt.gensalt()
+            password_hash = bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+            # Enter new user into Users table
+            cursor.execute(INSERT_USER_RETURN_ID, (name, email, password_hash))
             user_id = cursor.fetchone()[0]
+            # Create the user's Passwords table
             cursor.execute(CREATE_PASSWORDS_TABLE, (user_id, ))
     return {"id": user_id, "message": f"User {user_id} added."}, 201
 
@@ -102,18 +109,21 @@ def delete_user(user_id):
     return {"message": f"User {user_id} deleted."}, 200
 
 # Authenticates a user when provided with email and password - returns user's user_id if valid
-@app.get("/api/users/authenticate")
+@app.get("/api/users/login")
 def authenticate():
     data = request.get_json()
     email, password = data["email"], data["password"]
     with connection:
         with connection.cursor() as cursor:
-            cursor.execute(GET_USER_ID_WITH_PASSWORD, (email, password, ))
-            user_id = cursor.fetchone()
-            if user_id is not None:
-                return {"user_id": user_id[0], "message": "Authentication successful"}, 200
-            else:
-                return {"message": "Authentication failed"}, 401
+            cursor.execute(GET_USER_PASSWORD, (email, ))
+            user_info = cursor.fetchone()
+            if user_info is not None:
+                password_hash = user_info[0].encode('utf-8')
+                if bcrypt.checkpw(password.encode('utf-8'), password_hash):
+                    cursor.execute(GET_USER_ID, (email, ))
+                    user_id = cursor.fetchone()[0]
+                    return {"message": "Authentication successful", "user_id": user_id}, 200
+    return {"message": "Authentication failed"}, 401
 
 # Fetches list of user's passwords in (website, alias, password) form
 @app.get("/api/users/<int:user_id>")
