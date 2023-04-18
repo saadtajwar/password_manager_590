@@ -62,6 +62,10 @@ GET_KEY_SALT = (
     "SELECT key_salt FROM users WHERE email = %s"
 )
 
+GET_PUBLIC_KEY = (
+    "SELECT public_key FROM users WHERE email = %s"
+)
+
 INSERT_USER_RETURN_ID = (
     "INSERT INTO users (name, email, password, public_key, key_salt) VALUES (%s, %s, %s, %s, %s) RETURNING user_id;"
 )
@@ -191,7 +195,7 @@ def get_user(user_id):
                         decrypted_passwords[i][2] = aes.decrypt(b64decode(passwords[i][2].encode('utf-8')), None).decode('utf-8')
                     else:
                         # Decrypt shared password with private RSA key
-                        decrypted_passwords[i][2] = private_key.decrypt(b64decode(passwords[i][2].encode('utf-8')), padding.OAEP(padding.MGF1(hashes.SHA256()), hashes.SHA256(), None))
+                        decrypted_passwords[i][2] = private_key.decrypt(b64decode(passwords[i][2].encode('utf-8')), padding.OAEP(padding.MGF1(hashes.SHA256()), hashes.SHA256(), None)).decode('utf-8')
                 return {"passwords": decrypted_passwords, "message": "Passwords fetched successfully"}, 200
             else:
                 return {"message": "User not logged in"}, 401
@@ -249,13 +253,26 @@ def share_credential(user_id):
     with connection:
         with connection.cursor() as cursor:
             # TODO: only allow share if user is owner of password
+            # Get recipient's user ID
             cursor.execute(GET_USER_ID, (email, ))
             other_user_id = cursor.fetchone()[0]
+            # Add recipient's ID to owner's shared list
             cursor.execute(ADD_TO_SHARED_LIST, (user_id, user_id, website, other_user_id, website))
+            # Fetch credential
             cursor.execute(GET_PASSWORD_AND_ALIAS_FOR_WEBSITE, (user_id, website))
             alias_and_password = cursor.fetchone()
             alias, password = alias_and_password[0], alias_and_password[1]
-            cursor.execute(INSERT_PASSWORDS, (other_user_id, website, alias, password, False, f"{{ {user_id} }}"))
+            # Decrypt password with owner's master key
+            master_key = b64decode(session["master_key"].encode('utf-8'))
+            aes = AESSIV(master_key)
+            plaintext_password = aes.decrypt(b64decode(password.encode('utf-8')), None)
+            # Fetch recipient's public key
+            cursor.execute(GET_PUBLIC_KEY, (email, ))
+            public_key_pem = cursor.fetchone()[0].encode('ascii')
+            public_key = serialization.load_pem_public_key(public_key_pem, None)
+            # Encrypt password with recipient's public key and store
+            encrypted_password = public_key.encrypt(plaintext_password, padding.OAEP(padding.MGF1(hashes.SHA256()), hashes.SHA256(), None))
+            cursor.execute(INSERT_PASSWORDS, (other_user_id, website, alias, b64encode(encrypted_password).decode('utf-8'), False, f"{{ {user_id} }}"))
     return {"message": "Password shared successfully"}, 200
 
 
