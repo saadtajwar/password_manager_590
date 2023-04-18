@@ -58,6 +58,10 @@ GET_PASSWORD_AND_ALIAS_FOR_WEBSITE = (
     "SELECT alias, password FROM passwords%s WHERE website = %s"
 )
 
+GET_KEY_SALT = (
+    "SELECT key_salt FROM users WHERE email = %s"
+)
+
 INSERT_USER_RETURN_ID = (
     "INSERT INTO users (name, email, password, public_key, key_salt) VALUES (%s, %s, %s, %s, %s) RETURNING user_id;"
 )
@@ -106,20 +110,6 @@ def add_user():
             key_salt = os.urandom(16)
             kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=64, salt=key_salt, iterations=100000)
             master_key = kdf.derive(password.encode('utf-8'))
-            # Generate the user's RSA key pair
-            # PRNG to deterministically generate RSA key pair from master key
-            class PRNG(object):
-                def __init__(self, seed):
-                    self.index = 0
-                    self.seed = seed
-                    self.buffer = b""
-                def __call__(self, n):
-                    while len(self.buffer) < n:
-                        self.buffer += HMAC.new(
-                            self.seed + pack("<I", self.index)).digest()
-                        self.index += 1
-                    result, self.buffer = self.buffer[:n], self.buffer[n:]
-                    return result
             # Generate RSA key pair in pycryptodome
             pycrypto_private_key = RSA.generate(2048, PRNG(master_key))
             pycrypto_public_key = pycrypto_private_key.publickey()
@@ -129,7 +119,7 @@ def add_user():
             # Enter new user into Users table
             cursor.execute(INSERT_USER_RETURN_ID, (name, email, password_hash, public_key_pem.decode('ascii'), b64encode(key_salt).decode('utf-8')))
             user_id = cursor.fetchone()[0]
-            # Store the master key and private key in a session variable to avoid recomputation cost
+            # Store the user ID, master key, and private key in session variables to avoid recomputation cost
             session["user_id"] = user_id
             session["master_key"] = b64encode(master_key).decode('utf-8')
             session["private_key"] = private_key_pem.decode('ascii')
@@ -158,8 +148,22 @@ def authenticate():
             if user_info is not None:
                 password_hash = user_info[0].encode('utf-8')
                 if bcrypt.checkpw(password.encode('utf-8'), password_hash):
+                    # Get user ID
                     cursor.execute(GET_USER_ID, (email, ))
                     user_id = cursor.fetchone()[0]
+                    # Get the user's key salt
+                    cursor.execute(GET_KEY_SALT, (email, ))
+                    key_salt = b64decode(cursor.fetchone()[0].encode('utf-8'))
+                    # Calculate user's master key
+                    kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=64, salt=key_salt, iterations=100000)
+                    master_key = kdf.derive(password.encode('utf-8'))
+                    # Calculate user's private RSA key and encode it in PEM format
+                    pycrypto_private_key = RSA.generate(2048, PRNG(master_key))
+                    private_key_pem = pycrypto_private_key.export_key()
+                    # Store the user ID, master key, and private key in session variables to avoid recomputation cost
+                    session["user_id"] = user_id
+                    session["master_key"] = b64encode(master_key).decode('utf-8')
+                    session["private_key"] = private_key_pem.decode('ascii')
                     return {"message": "Authentication successful", "user_id": user_id}, 200
     return {"message": "Authentication failed"}, 401
 
@@ -243,3 +247,17 @@ def unshared_credential(user_id):
 def logout(user_id):
     session.clear()
     return {"message": "User logged out"}, 200
+
+# Helper PRNG class used to deterministically generate RSA key pair from master key
+class PRNG(object):
+    def __init__(self, seed):
+        self.index = 0
+        self.seed = seed
+        self.buffer = b""
+    def __call__(self, n):
+        while len(self.buffer) < n:
+            self.buffer += HMAC.new(
+                self.seed + pack("<I", self.index)).digest()
+            self.index += 1
+        result, self.buffer = self.buffer[:n], self.buffer[n:]
+        return result
