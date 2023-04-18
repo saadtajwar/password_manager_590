@@ -1,12 +1,22 @@
 import os
 import psycopg2
 import bcrypt
+from base64 import b64encode, b64decode
 from dotenv import load_dotenv
-from flask import Flask, request
+from flask import Flask, request, session
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.ciphers.aead import AESSIV
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import padding
+from Crypto.PublicKey import RSA
+from Crypto.Hash import HMAC
+from struct import pack
 
 load_dotenv()
 
 app = Flask(__name__)
+app.secret_key = "secret"
 url = os.getenv("DATABASE_URL")
 connection = psycopg2.connect(url)
 
@@ -25,7 +35,7 @@ connection = psycopg2.connect(url)
 #   -> shared_list
 
 CREATE_USERS_TABLE = (
-    "CREATE TABLE IF NOT EXISTS users (user_id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, email VARCHAR(100) NOT NULL UNIQUE, password TEXT NOT NULL);"
+    "CREATE TABLE IF NOT EXISTS users (user_id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, email VARCHAR(100) NOT NULL UNIQUE, password TEXT NOT NULL, public_key TEXT NOT NULL, key_salt TEXT NOT NULL);"
 )
 
 CREATE_PASSWORDS_TABLE = (
@@ -49,7 +59,7 @@ GET_PASSWORD_AND_ALIAS_FOR_WEBSITE = (
 )
 
 INSERT_USER_RETURN_ID = (
-    "INSERT INTO users (name, email, password) VALUES (%s, %s, %s) RETURNING user_id;"
+    "INSERT INTO users (name, email, password, public_key, key_salt) VALUES (%s, %s, %s, %s, %s) RETURNING user_id;"
 )
 
 INSERT_PASSWORDS = (
@@ -92,9 +102,37 @@ def add_user():
             # Hash master password before storing
             salt = bcrypt.gensalt()
             password_hash = bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+            # Generate the user's master key
+            key_salt = os.urandom(16)
+            kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=64, salt=key_salt, iterations=100000)
+            master_key = kdf.derive(password.encode('utf-8'))
+            # Generate the user's RSA key pair
+            # PRNG to deterministically generate RSA key pair from master key
+            class PRNG(object):
+                def __init__(self, seed):
+                    self.index = 0
+                    self.seed = seed
+                    self.buffer = b""
+                def __call__(self, n):
+                    while len(self.buffer) < n:
+                        self.buffer += HMAC.new(
+                            self.seed + pack("<I", self.index)).digest()
+                        self.index += 1
+                    result, self.buffer = self.buffer[:n], self.buffer[n:]
+                    return result
+            # Generate RSA key pair in pycryptodome
+            pycrypto_private_key = RSA.generate(2048, PRNG(master_key))
+            pycrypto_public_key = pycrypto_private_key.publickey()
+            # Encode keys in PEM format
+            private_key_pem = pycrypto_private_key.export_key()
+            public_key_pem = pycrypto_public_key.export_key()
             # Enter new user into Users table
-            cursor.execute(INSERT_USER_RETURN_ID, (name, email, password_hash))
+            cursor.execute(INSERT_USER_RETURN_ID, (name, email, password_hash, public_key_pem.decode('ascii'), b64encode(key_salt).decode('utf-8')))
             user_id = cursor.fetchone()[0]
+            # Store the master key and private key in a session variable to avoid recomputation cost
+            session["user_id"] = user_id
+            session["master_key"] = b64encode(master_key).decode('utf-8')
+            session["private_key"] = private_key_pem.decode('ascii')
             # Create the user's Passwords table
             cursor.execute(CREATE_PASSWORDS_TABLE, (user_id, ))
     return {"id": user_id, "message": f"User {user_id} added."}, 201
@@ -199,3 +237,9 @@ def unshared_credential(user_id):
             cursor.execute(REMOVE_FROM_SHARED_LIST, (user_id, user_id, website, other_user_id, website))
             cursor.execute(DELETE_PASSWORD, (other_user_id, website))
     return {"message": "Password unshared successfully"}, 200
+
+# Logs out a user and clears their session variables (keys)
+@app.post("/api/users/<int:user_id>/logout")
+def logout(user_id):
+    session.clear()
+    return {"message": "User logged out"}, 200
