@@ -1,6 +1,7 @@
 import React, {useEffect, useState} from 'react'
 import NewCredentialsForm from '../components/NewCredentialsForm'
 import SingularCredential from '../components/SingularCredential'
+import CredentialList from '../components/CredentialList'
 
 
 /*
@@ -14,12 +15,11 @@ Whats in a credential:
 
 const CredentialsInfo = ({credentialList}) => {
 
-
+    console.log('the list', credentialList);
     return (
         <div>
             <NewCredentialsForm />
-            {credentialList.map(credential => 
-                <SingularCredential credential={credential} />)}
+            <CredentialList credentialList={credentialList} />
         </div>
     )
 }

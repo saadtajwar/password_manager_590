@@ -8,13 +8,19 @@ import CredentialsInfo from './components/CredentialsInfo'
 
 const App = () => {
   const [user, setUser] = useState(null);
-  const [credentialList, setCredentialList] = useState(null);
+  const dummyCredentialList = [{websiteName: "gmail.com", username: "myusername", password: "examplepassword"}];
+  const [credentialList, setCredentialList] = useState(dummyCredentialList);
 
 
   /*
     - make a useEffect to get the stored credentials
     - make a useEffect to see if the user is logged in? (check localStorage, honestly might need to find better option than localStorage)
   */
+
+
+  // const newCredentialList = [...credentialList, dummyCredential];
+  // setCredentialList(newCredentialList);
+
 
 
   return (
