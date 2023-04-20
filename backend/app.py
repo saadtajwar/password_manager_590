@@ -17,7 +17,7 @@ from struct import pack
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = "secret"()
+app.secret_key = "secret"
 CORS(app)
 url = os.getenv("DATABASE_URL")
 connection = psycopg2.connect(url)
