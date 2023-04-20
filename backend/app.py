@@ -141,7 +141,7 @@ def delete_user(user_id):
     return {"message": f"User {user_id} deleted."}, 200
 
 # Authenticates a user when provided with email and password - returns user's user_id if valid
-@app.get("/api/users/login")
+@app.post("/api/users/login")
 def authenticate():
     data = request.get_json()
     email, password = data["email"], data["password"]
