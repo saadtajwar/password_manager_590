@@ -1,8 +1,9 @@
+import axios from 'axios';
 import React, {useState} from 'react'
 import {useNavigate} from 'react-router-dom'
 
 const LoginForm = ({user, setUser}) => {
-    const [username, setUsername] = useState('');
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const navigate = useNavigate();
 
@@ -18,18 +19,24 @@ const LoginForm = ({user, setUser}) => {
         try {
             e.preventDefault();
             const loggingInUser = {
-                username,
+                email,
                 password
             }
+            const apiURL = 'http://localhost:5000/api/users/login';
+            const loggedUser = await axios.post(apiURL, loggingInUser);
+            const userID = loggedUser.user_id;
+            const user = {email, password, userID};
+            setUser(user);
+            window.localStorage.setItem('loggedUser', JSON.stringify(user));
             // send attempted user credentials to backend API and setUser to that
             // , then log that in local storage (prob gotta change this later to be more secure)
             // setUser(returnedUser)    
             // window.localStorage.setItem('loggedUser', JSON.stringify(returnedUser));
-            setUsername('');
+            setEmail('');
             setPassword('');
             navigate('/');
         } catch (error) {
-            alert('Log in did not work')
+            console.log('Log in did not work');
         }
     }
 
@@ -37,7 +44,7 @@ const LoginForm = ({user, setUser}) => {
   return (
     <div>
         <form onSubmit={handleSubmit}>
-            <input value={username} onChange={(e) => setUsername(e.target.value)} />
+            <input value={email} onChange={(e) => setEmail(e.target.value)} />
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
         </form>
     </div>

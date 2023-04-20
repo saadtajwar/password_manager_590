@@ -7,7 +7,7 @@ import CredentialsInfo from './components/CredentialsInfo'
 
 
 const App = () => {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState({email: 'testemail@gmail.com', password: 'password', userID: 0});
   const dummyCredentialList = [{websiteName: "gmail.com", username: "myusername", password: "examplepassword"}];
   const [credentialList, setCredentialList] = useState(dummyCredentialList);
 
@@ -29,8 +29,8 @@ const App = () => {
 
       <Routes>
         <Route path='/register' element={<RegisterForm />} />
-        <Route path='/login' element={<LoginForm />} />
-        <Route path='/' element={<CredentialsInfo credentialList={credentialList} />} />
+        <Route path='/login' element={<LoginForm user={user} setUser={setUser} />} />
+        <Route path='/' element={<CredentialsInfo credentialList={credentialList} userID={user.userID}/>} />
 
       </Routes>
     </Router>

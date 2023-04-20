@@ -13,12 +13,12 @@ Whats in a credential:
     * need to figure out if credential should include an array of ppls usernames its shared w/ ? *
 */
 
-const CredentialsInfo = ({credentialList}) => {
+const CredentialsInfo = ({credentialList, userID}) => {
 
     console.log('the list', credentialList);
     return (
         <div>
-            <NewCredentialsForm />
+            <NewCredentialsForm userID={userID} />
             <CredentialList credentialList={credentialList} />
         </div>
     )
