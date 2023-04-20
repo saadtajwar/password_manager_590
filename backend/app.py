@@ -4,6 +4,7 @@ import bcrypt
 from base64 import b64encode, b64decode
 from dotenv import load_dotenv
 from flask import Flask, request, session
+from flask_cors import CORS
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESSIV
@@ -16,7 +17,8 @@ from struct import pack
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = "secret"
+app.secret_key = "secret"()
+CORS(app)
 url = os.getenv("DATABASE_URL")
 connection = psycopg2.connect(url)
 
@@ -97,6 +99,10 @@ ADD_TO_SHARED_LIST = (
 REMOVE_FROM_SHARED_LIST = (
     "UPDATE passwords%s SET shared_list = (ARRAY_REMOVE((SELECT shared_list FROM passwords%s WHERE website = %s), %s)) WHERE website = %s"
 )
+
+@app.get("/")
+def home_page():
+    return "Test"
 
 # Registers a user - adds new user to users table and creates their password table
 @app.post("/api/users")
