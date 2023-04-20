@@ -4,6 +4,7 @@ const NewCredentialsForm = () => {
     const [websiteUsername, setWebsiteUsername] = useState('');
     const [credentialUsername, setCredentialUsername] = useState('');
     const [credentialPassword, setCredentialPassword] = useState('');
+    const [randomPassword, setRandomPassword] = useState('');
 
 
     const handleSubmit = (e) => {
@@ -13,12 +14,23 @@ const NewCredentialsForm = () => {
         */
     }
 
+    const handleRandomPasswordSubmit = async (e) => {
+        e.preventDefualt();
+        setCredentialPassword("abc");
+    }
+
     return (
         <div>
             <form onSubmit={handleSubmit}>
-                <input value={websiteUsername} onChange={(e) => setWebsiteUsername(e.target.value)} />
-                <input value={credentialUsername} onChange={(e) => setCredentialUsername(e.target.value)} />
-                <input type="password" value={credentialPassword} onChange={(e) => setCredentialPassword(e.target.value)} />
+                Credential Website:<input value={websiteUsername} onChange={(e) => setWebsiteUsername(e.target.value)} />
+                Credential Username:<input value={credentialUsername} onChange={(e) => setCredentialUsername(e.target.value)} />
+                Credential Password:<input type="password" value={credentialPassword} onChange={(e) => setCredentialPassword(e.target.value)} />
+                <button type="submit">Add New Credential</button>
+            </form>
+
+            <form onSubmit={handleRandomPasswordSubmit}>
+
+                <button type="submit">Generate Random Secure Password</button>
             </form>
         </div>
     )
