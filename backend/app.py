@@ -117,17 +117,17 @@ def getIdFromEmail():
         with connection.cursor() as cursor:
             cursor.execute(GET_USER_ID, (email, ))
             user_id = cursor.fetchone()[0]
-            return user_id
+            return {"user_id": user_id}, 200
         
 @app.get("/api/users/emailFromId")
-def getIdFromEmail():
+def getEmailFromIdl():
     data = request.get_json()
-    userId = data["userId"]
+    userId = data["user_id"]
     with connection:
         with connection.cursor() as cursor:
             cursor.execute(GET_EMAIL, (userId, ))
             email = cursor.fetchone()[0]
-            return email
+            return {"email": email}, 200
 
 # Registers a user - adds new user to users table and creates their password table
 @app.post("/api/users")
