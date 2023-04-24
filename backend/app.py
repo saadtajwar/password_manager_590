@@ -52,6 +52,11 @@ GET_USER_ID = (
     "SELECT user_id FROM users WHERE email=%s;"
 )
 
+# Mazin Added
+GET_EMAIL = (
+    "SELECT email FROM users WHERE user_id=%s;"
+)
+
 GET_PASSWORDS = (
     "SELECT website, alias, password, is_owner, shared_list FROM passwords%s;"
 )
@@ -103,6 +108,26 @@ REMOVE_FROM_SHARED_LIST = (
 @app.get("/")
 def home_page():
     return "Test"
+
+@app.get("/api/users/idFromEmail")
+def getIdFromEmail():
+    data = request.get_json()
+    email = data["email"]
+    with connection:
+        with connection.cursor() as cursor:
+            cursor.execute(GET_USER_ID, (email, ))
+            user_id = cursor.fetchone()[0]
+            return user_id
+        
+@app.get("/api/users/emailFromId")
+def getIdFromEmail():
+    data = request.get_json()
+    userId = data["userId"]
+    with connection:
+        with connection.cursor() as cursor:
+            cursor.execute(GET_EMAIL, (userId, ))
+            email = cursor.fetchone()[0]
+            return email
 
 # Registers a user - adds new user to users table and creates their password table
 @app.post("/api/users")
