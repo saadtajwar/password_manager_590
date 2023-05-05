@@ -69,12 +69,16 @@ GET_KEY_SALT = (
     "SELECT key_salt FROM users WHERE email = %s"
 )
 
-GET_PUBLIC_KEY = (
+GET_PUBLIC_KEY_FROM_EMAIL = (
     "SELECT public_key FROM users WHERE email = %s"
 )
 
-GET_SHARED_LIST = (
-    "SELECT shared_list FROM passwords%s WHERE website = %s"
+GET_PUBLIC_KEY_FROM_ID = (
+    "SELECT public_key FROM users WHERE user_id = %s"
+)
+
+GET_IS_OWNER_SHARED_LIST = (
+    "SELECT is_owner, shared_list FROM passwords%s WHERE website = %s"
 )
 
 GET_ALL_WEBSITES_IS_OWNER_SHARED_LIST = (
@@ -175,7 +179,6 @@ def add_user():
 def delete_user(user_id):
     with connection:
         with connection.cursor() as cursor:
-            # TODO: delete shared passwords
             cursor.execute(GET_ALL_WEBSITES_IS_OWNER_SHARED_LIST, (user_id, ))
             websites = cursor.fetchall()
             for entry in websites:
@@ -272,14 +275,29 @@ def update_credential(user_id):
     with connection:
         with connection.cursor() as cursor:
             if "user_id" in session and session["user_id"] == user_id:
-                # TODO: only allow update if user is owner of password
-                # Encrypt the user's password with the master key before adding to the table
-                master_key = b64decode(session["master_key"].encode('utf-8'))
-                aes = AESSIV(master_key)
-                encrypted_password = aes.encrypt(password.encode('utf-8'), None)
-                cursor.execute(UPDATE_PASSWORD, (user_id, b64encode(encrypted_password).decode('utf-8'), website))
-                # TODO: update password in shared users' tables
-                return {"message": f"Password for {website} updated"}, 200
+                # Get is_owner and shared_list for password
+                cursor.execute(GET_IS_OWNER_SHARED_LIST, (user_id, website))
+                entry = cursor.fetchone()
+                is_owner, shared_list = entry[0], entry[1]
+                # Only allow update if user is owner
+                if is_owner:
+                    # Encrypt the user's password with the master key before updating the table
+                    master_key = b64decode(session["master_key"].encode('utf-8'))
+                    aes = AESSIV(master_key)
+                    encrypted_password = aes.encrypt(password.encode('utf-8'), None)
+                    cursor.execute(UPDATE_PASSWORD, (user_id, b64encode(encrypted_password).decode('utf-8'), website))
+                    # Update password in shared users' tables
+                    for user in shared_list:
+                        # Fetch recipient's public key
+                        cursor.execute(GET_PUBLIC_KEY_FROM_ID, (user, ))
+                        public_key_pem = cursor.fetchone()[0].encode('ascii')
+                        public_key = serialization.load_pem_public_key(public_key_pem, None)
+                        # Encrypt password with recipient's public key and store
+                        encrypted_password = public_key.encrypt(password.encode('utf-8'), padding.OAEP(padding.MGF1(hashes.SHA256()), hashes.SHA256(), None))
+                        cursor.execute(UPDATE_PASSWORD, (user, b64encode(encrypted_password).decode('utf-8'), website))
+                    return {"message": f"Password for {website} updated"}, 200
+                else:
+                    return {"message": "User is not owner of password"}, 401
             else: 
                 return {"message": "User not logged in"}, 401
 
@@ -321,7 +339,7 @@ def share_credential(user_id):
                 aes = AESSIV(master_key)
                 plaintext_password = aes.decrypt(b64decode(password.encode('utf-8')), None)
                 # Fetch recipient's public key
-                cursor.execute(GET_PUBLIC_KEY, (email, ))
+                cursor.execute(GET_PUBLIC_KEY_FROM_EMAIL, (email, ))
                 public_key_pem = cursor.fetchone()[0].encode('ascii')
                 public_key = serialization.load_pem_public_key(public_key_pem, None)
                 # Encrypt password with recipient's public key and store
