@@ -81,6 +81,10 @@ GET_IS_OWNER_SHARED_LIST = (
     "SELECT is_owner, shared_list FROM passwords%s WHERE website = %s"
 )
 
+GET_IS_OWNER = (
+    "SELECT is_owner FROM passwords%s WHERE website = %s"
+)
+
 GET_ALL_WEBSITES_IS_OWNER_SHARED_LIST = (
     "SELECT website, is_owner, shared_list FROM passwords%s"
 )
@@ -333,28 +337,33 @@ def share_credential(user_id):
     with connection:
         with connection.cursor() as cursor:
             if "user_id" in session and session["user_id"] == user_id:
-                # TODO: only allow share if user is owner of password
-                # Get recipient's user ID
-                cursor.execute(GET_USER_ID, (email, ))
-                other_user_id = cursor.fetchone()[0]
-                # Add recipient's ID to owner's shared list
-                cursor.execute(ADD_TO_SHARED_LIST, (user_id, user_id, website, other_user_id, website))
-                # Fetch credential
-                cursor.execute(GET_PASSWORD_AND_ALIAS_FOR_WEBSITE, (user_id, website))
-                alias_and_password = cursor.fetchone()
-                alias, password = alias_and_password[0], alias_and_password[1]
-                # Decrypt password with owner's master key
-                master_key = b64decode(session["master_key"].encode('utf-8'))
-                aes = AESSIV(master_key)
-                plaintext_password = aes.decrypt(b64decode(password.encode('utf-8')), None)
-                # Fetch recipient's public key
-                cursor.execute(GET_PUBLIC_KEY_FROM_EMAIL, (email, ))
-                public_key_pem = cursor.fetchone()[0].encode('ascii')
-                public_key = serialization.load_pem_public_key(public_key_pem, None)
-                # Encrypt password with recipient's public key and store
-                encrypted_password = public_key.encrypt(plaintext_password, padding.OAEP(padding.MGF1(hashes.SHA256()), hashes.SHA256(), None))
-                cursor.execute(INSERT_PASSWORDS, (other_user_id, website, alias, b64encode(encrypted_password).decode('utf-8'), False, f"{{ {user_id} }}"))
-                return {"message": "Password shared successfully"}, 200
+                cursor.execute(GET_IS_OWNER, (user_id, website))
+                is_owner = cursor.fetchone()[0]
+                # Only allow share if user is owner of password
+                if is_owner:
+                    # Get recipient's user ID
+                    cursor.execute(GET_USER_ID, (email, ))
+                    other_user_id = cursor.fetchone()[0]
+                    # Add recipient's ID to owner's shared list
+                    cursor.execute(ADD_TO_SHARED_LIST, (user_id, user_id, website, other_user_id, website))
+                    # Fetch credential
+                    cursor.execute(GET_PASSWORD_AND_ALIAS_FOR_WEBSITE, (user_id, website))
+                    alias_and_password = cursor.fetchone()
+                    alias, password = alias_and_password[0], alias_and_password[1]
+                    # Decrypt password with owner's master key
+                    master_key = b64decode(session["master_key"].encode('utf-8'))
+                    aes = AESSIV(master_key)
+                    plaintext_password = aes.decrypt(b64decode(password.encode('utf-8')), None)
+                    # Fetch recipient's public key
+                    cursor.execute(GET_PUBLIC_KEY_FROM_EMAIL, (email, ))
+                    public_key_pem = cursor.fetchone()[0].encode('ascii')
+                    public_key = serialization.load_pem_public_key(public_key_pem, None)
+                    # Encrypt password with recipient's public key and store
+                    encrypted_password = public_key.encrypt(plaintext_password, padding.OAEP(padding.MGF1(hashes.SHA256()), hashes.SHA256(), None))
+                    cursor.execute(INSERT_PASSWORDS, (other_user_id, website, alias, b64encode(encrypted_password).decode('utf-8'), False, f"{{ {user_id} }}"))
+                    return {"message": "Password shared successfully"}, 200
+                else:
+                    return {"message": "User is not owner of password"}, 401
             else: 
                 return {"message": "User not logged in"}, 401
 
@@ -366,14 +375,19 @@ def unshared_credential(user_id):
     with connection:
         with connection.cursor() as cursor:
             if "user_id" in session and session["user_id"]:
-                # TODO: only allow unshare if user is owner of password
-                cursor.execute(GET_USER_ID, (email, ))
-                other_user_id = cursor.fetchone()[0]
-                cursor.execute(REMOVE_FROM_SHARED_LIST, (user_id, user_id, website, other_user_id, website))
-                cursor.execute(DELETE_PASSWORD, (other_user_id, website))
-                return {"message": "Password unshared successfully"}, 200
+                cursor.execute(GET_IS_OWNER, (user_id, website))
+                is_owner = cursor.fetchone()[0]
+                # Only allow unshare if user is owner of password
+                if is_owner:
+                    cursor.execute(GET_USER_ID, (email, ))
+                    other_user_id = cursor.fetchone()[0]
+                    cursor.execute(REMOVE_FROM_SHARED_LIST, (user_id, user_id, website, other_user_id, website))
+                    cursor.execute(DELETE_PASSWORD, (other_user_id, website))
+                    return {"message": "Password unshared successfully"}, 200
+                else:
+                    return {"message": "User is not owner of password"}, 401
             else:
-                return {"message": "User not logged in"}
+                return {"message": "User not logged in"}, 401
 
 # Logs out a user and clears their session variables (keys)
 @app.post("/api/users/<int:user_id>/logout")
