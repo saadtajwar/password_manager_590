@@ -73,6 +73,14 @@ GET_PUBLIC_KEY = (
     "SELECT public_key FROM users WHERE email = %s"
 )
 
+GET_SHARED_LIST = (
+    "SELECT shared_list FROM passwords%s WHERE website = %s"
+)
+
+GET_ALL_WEBSITES_IS_OWNER_SHARED_LIST = (
+    "SELECT website, is_owner, shared_list FROM passwords%s"
+)
+
 INSERT_USER_RETURN_ID = (
     "INSERT INTO users (name, email, password, public_key, key_salt) VALUES (%s, %s, %s, %s, %s) RETURNING user_id;"
 )
@@ -167,6 +175,14 @@ def add_user():
 def delete_user(user_id):
     with connection:
         with connection.cursor() as cursor:
+            # TODO: delete shared passwords
+            cursor.execute(GET_ALL_WEBSITES_IS_OWNER_SHARED_LIST, (user_id, ))
+            websites = cursor.fetchall()
+            for entry in websites:
+                website, is_owner, shared_list = entry[0], entry[1], entry[2]
+                if is_owner and len(shared_list) > 0:
+                    for user in shared_list:
+                        cursor.execute(DELETE_PASSWORD, (user, website))
             cursor.execute(DELETE_USER_PASSWORDS, (user_id, ))
             cursor.execute(DELETE_USER, (user_id, ))
     return {"message": f"User {user_id} deleted."}, 200
