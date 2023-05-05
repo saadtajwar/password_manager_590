@@ -309,10 +309,19 @@ def delete_credential(user_id):
     with connection:
         with connection.cursor() as cursor:
             if "user_id" in session and session["user_id"] == user_id:
-                # TODO: only allow deletion if user is owner of password
-                cursor.execute(DELETE_PASSWORD, (user_id, website))
-                # TODO: delete password from shared users tables
-                return {"message": f"Password for {website} deleted"}, 200
+                # Get is_owner and shared_list for password
+                cursor.execute(GET_IS_OWNER_SHARED_LIST, (user_id, website))
+                entry = cursor.fetchone()
+                is_owner, shared_list = entry[0], entry[1]
+                # Only allow deletion if user is owner of password
+                if is_owner:
+                    cursor.execute(DELETE_PASSWORD, (user_id, website))
+                    # Delete password from shared users tables
+                    for user in shared_list:
+                        cursor.execute(DELETE_PASSWORD, (user, website))
+                    return {"message": f"Password for {website} deleted"}, 200
+                else:
+                    return {"message": "User is not owner of password"}, 401
             else:
                 return {"message": "User not logged in"}, 401
 
