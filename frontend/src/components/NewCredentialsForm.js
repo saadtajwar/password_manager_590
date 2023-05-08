@@ -15,9 +15,11 @@ const NewCredentialsForm = ({userID}) => {
             alias: credentialUsername,
             password: credentialPassword
         }
-        /*
-            send POST request to our REST API to add this credential stuff into the user's credential storage
-        */
+        const apiURL = `http://localhost:5000/api/users/${userID}/add`;
+        const returnedMessage = await axios.post(apiURL, newCredential);
+        setWebsiteUsername('');
+        setCredentialUsername('');
+        setCredentialPassword('');
     }
 
     return (

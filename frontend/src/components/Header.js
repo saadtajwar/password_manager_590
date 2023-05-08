@@ -37,6 +37,9 @@ const Header = ({user}) => {
         <div>
             <Link to='/'>Secure Password Manager</Link>
         </div>
+        <div>
+            <h1>Welcome back, {user.email}</h1>
+        </div>
         <div style={registerVisible}>
             <Link to='/register'>Register</Link>
         </div>
